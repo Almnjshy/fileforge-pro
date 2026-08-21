@@ -1,0 +1,225 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "22"
+  JAVA_VERSION: "17"
+
+jobs:
+  # ============ Test Job ============
+  test:
+    name: Run Tests & Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build static export
+        run: npm run build:static
+        env:
+          NEXT_STATIC_EXPORT: "true"
+
+  # ============ Build APK Job ============
+  build-android:
+    name: Build Android APK
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: 📥 Checkout source
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 🤖 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 📦 Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: 🛠️ Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.9"
+
+      - name: 📥 Install dependencies
+        run: npm install --legacy-peer-deps --no-audit --no-fund
+
+      - name: 🏗️ Build Next.js static export
+        run: npm run build:static
+        env:
+          NEXT_STATIC_EXPORT: "true"
+
+      - name: 📝 Verify static output
+        run: |
+          if [ ! -d "out" ]; then
+            echo "❌ Static export output directory not found"
+            exit 1
+          fi
+          echo "✅ Static export generated successfully"
+
+      - name: 📲 Install Capacitor
+        run: |
+          npm install -D @capacitor/cli@^6 --legacy-peer-deps --no-audit --no-fund
+          npm install @capacitor/core@^6 @capacitor/android@^6 @capacitor/app@^6 @capacitor/haptics@^6 @capacitor/keyboard@^6 @capacitor/status-bar@^6 @capacitor/splash-screen@^6 @capacitor/preferences@^6 @capacitor/filesystem@^6 --legacy-peer-deps --no-audit --no-fund
+
+      - name: 🔧 Create Android Platform & Apply Custom Files
+        run: |
+          # Step 1: Add android platform (creates fresh android/ folder)
+          npx cap add android
+          
+          # Step 2: Replace app/src/main with our custom version
+          # This includes: AndroidManifest.xml (with ALL permissions), plugins, resources, icons
+          rm -rf android/app/src/main
+          cp -r android-custom/app/src/main android/app/src/main
+          
+          # Step 3: Replace build files
+          cp android-custom/app/build.gradle android/app/build.gradle
+          cp android-custom/app/proguard-rules.pro android/app/proguard-rules.pro 2>/dev/null || true
+          cp android-custom/app/capacitor.build.gradle android/app/capacitor.build.gradle 2>/dev/null || true
+          cp android-custom/build.gradle android/build.gradle
+          cp android-custom/settings.gradle android/settings.gradle
+          cp android-custom/gradle.properties android/gradle.properties 2>/dev/null || true
+          
+          # Step 4: Copy gradle wrapper
+          cp android-custom/gradlew android/gradlew 2>/dev/null || true
+          chmod +x android/gradlew 2>/dev/null || true
+          mkdir -p android/gradle/wrapper
+          cp -r android-custom/gradle/* android/gradle/ 2>/dev/null || true
+          
+          # Step 5: Verify
+          echo "=== AndroidManifest.xml (first 30 lines) ==="
+          head -30 android/app/src/main/AndroidManifest.xml
+          echo ""
+          echo "=== Kotlin files ==="
+          find android/app/src/main/java -name "*.kt" -type f
+          echo ""
+          echo "=== Resource files ==="
+          find android/app/src/main/res -type f | head -20
+
+      - name: 🔄 Sync Capacitor
+        run: npx cap sync android
+
+      - name: 🔨 Build Android Debug APK
+        run: gradle -p android assembleDebug --no-daemon -x lintVitalAnalyzeRelease
+
+      - name: ℹ️ Check release signing status
+        run: |
+          if [ -z "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret is not set — the release APK will be signed with the debug key, not a production keystore. This is fine for testing, but not for a Play Store release. See Settings → Secrets and variables → Actions to configure it."
+          else
+            echo "ANDROID_KEYSTORE_BASE64 is set — release APK will use production signing."
+          fi
+
+      - name: 🔨 Build Android Release APK (signed if keystore available)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: gradle -p android assembleRelease --no-daemon -x lintVitalAnalyzeRelease
+
+      - name: 📤 Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fileforge-pro-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 📤 Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fileforge-pro-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 📤 Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            android/app/build/reports/
+            out/
+          retention-days: 7
+
+  # ============ Release Job ============
+  release:
+    name: Release APK
+    needs: build-android
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: 📥 Download Debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: fileforge-pro-debug-apk
+          path: artifacts/debug
+      - name: 📥 Download Release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: fileforge-pro-release-apk
+          path: artifacts/release
+      - name: 🏷️ Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: FileForge Pro ${{ github.ref_name }}
+          body: |
+            # FileForge Pro ${{ github.ref_name }}
+
+            ## 📱 Downloads
+            - **Debug APK** (signed with debug key, ready to install)
+            - **Release APK** (signed with production keystore if configured)
+
+            ## 📋 Installation
+            1. Download the APK file
+            2. Enable "Install from unknown sources" in Android settings
+            3. Open the APK file and tap "Install"
+            4. Grant the required permissions when prompted
+            5. Enjoy FileForge Pro!
+
+            ## ⚙️ Requirements
+            - Android 7.0 (API 24) or higher
+            - ~50 MB free storage
+
+            ## 🔐 Permissions
+            - Storage Access (required)
+            - Photos, Videos, Audio (Android 13+)
+            - Camera, Microphone, Biometric
+            - Notifications, Location
+          files: |
+            artifacts/debug/*.apk
+            artifacts/release/*.apk
+          draft: false
+          prerelease: false

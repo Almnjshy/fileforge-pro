@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FileForge Pro</string>
+    <string name="title_activity_main">FileForge Pro</string>
+    <string name="package_name">pro.fileforge.app</string>
+    <string name="custom_url_scheme">pro.fileforge.app</string>
+    <string name="launcher_name">@string/app_name</string>
+</resources>

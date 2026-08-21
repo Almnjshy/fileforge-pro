@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.625rem;
+    --background: 40 20% 98%;
+    --foreground: 30 30% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 30 30% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 30% 12%;
+    --primary: 25 95% 53%;
+    --primary-foreground: 40 20% 98%;
+    --secondary: 40 10% 96%;
+    --secondary-foreground: 30 30% 12%;
+    --muted: 40 10% 96%;
+    --muted-foreground: 30 5% 45%;
+    --accent: 30 100% 95%;
+    --accent-foreground: 30 30% 12%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 40 20% 98%;
+    --border: 30 10% 90%;
+    --input: 30 10% 90%;
+    --ring: 25 95% 53%;
+  }
+
+  .dark {
+    --background: 240 20% 7%;
+    --foreground: 240 10% 95%;
+    --card: 240 15% 12%;
+    --card-foreground: 240 10% 95%;
+    --popover: 240 18% 10%;
+    --popover-foreground: 240 10% 95%;
+    --primary: 25 95% 53%;
+    --primary-foreground: 240 20% 7%;
+    --secondary: 240 10% 18%;
+    --secondary-foreground: 240 10% 95%;
+    --muted: 240 10% 18%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 25 30% 15%;
+    --accent-foreground: 240 10% 95%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 240 10% 95%;
+    /* Use solid HSL values (no embedded alpha) so Tailwind's border-color
+       composition works correctly — previously `--border: 0 0% 100% / 0.08`
+       and `--input: 0 0% 100% / 0.12` broke `border-border`/`border-input`
+       classes because Tailwind wraps the variable in hsl() and the extra
+       alpha layer produced invalid CSS. */
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 18%;
+    --ring: 25 95% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html, body {
+    /* Respect system bars — Capacitor applies insets as padding on the
+       root view (see MainActivity.kt), but this provides a CSS-level
+       fallback for the standalone web build. */
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overscroll-behavior: none;
+    /* Use env(safe-area-inset-*) to keep content off the system bars */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Allow the body to fill the viewport but defer inset handling to
+       the root app container (.ff-root). */
+  }
+}
+
+/* Scrollbar styling */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* RTL support */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+}
+
+/* Touch targets on mobile — only target buttons with interactive classes,
+   not ALL buttons (toolbar icon buttons can be 28-32px). */
+@media (max-width: 768px) {
+  button.ff-touch-target,
+  [role="button"].ff-touch-target {
+    min-height: 36px;
+  }
+}
+
+button, [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* High Contrast Mode */
+.high-contrast {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --border: 0 0% 0%;
+  --input: 0 0% 0%;
+  --ring: 0 0% 0%;
+  --primary: 0 0% 0%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 0 0% 15%;
+  --muted-foreground: 0 0% 80%;
+}
+.dark.high-contrast {
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 0%;
+  --card-foreground: 0 0% 100%;
+  --border: 0 0% 100%;
+  --input: 0 0% 100%;
+  --ring: 0 0% 100%;
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 0%;
+  --accent: 0 0% 20%;
+  --muted-foreground: 0 0% 80%;
+}
+.high-contrast * {
+  border-color: hsl(var(--border)) !important;
+}
+
+/* Reduced Motion */
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Focus visible */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Skip to content */
+.sr-skip {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  padding: 8px 16px;
+  z-index: 1000;
+  border-radius: 0 0 4px 0;
+}
+.sr-skip:focus {
+  top: 0;
+}
+
+/* Arabic font application — apply Noto Sans Arabic when the --font-arabic
+   variable is defined (loaded via next/font/google in layout.tsx). Falls
+   back to system Arabic fonts if the variable isn't set. */
+[lang="ar"] body,
+[lang="ar"] input,
+[lang="ar"] textarea,
+[lang="ar"] button {
+  font-family: var(--font-arabic), var(--font-geist-sans), "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Selection in transparent textareas (used by TextEditor syntax highlight overlay) */
+textarea.ff-textarea-selectable::selection {
+  background: rgba(249, 115, 22, 0.4);
+  color: transparent;
+}
